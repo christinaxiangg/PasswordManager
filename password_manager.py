@@ -488,6 +488,7 @@ class PasswordManager:
         self.master_pw_entry = tk.Entry(login_box, show="●", font=('Arial', 12), width=30)
         self.master_pw_entry.pack(pady=10, padx=20)
         self.master_pw_entry.bind('<Return>', lambda e: self._handle_login())
+        self._setup_context_menu(self.master_pw_entry)
 
         if not vault_exists:
             tk.Label(login_box, text="Confirm Password:", font=('Arial', 11),
@@ -495,6 +496,7 @@ class PasswordManager:
             self.confirm_pw_entry = tk.Entry(login_box, show="●", font=('Arial', 12), width=30)
             self.confirm_pw_entry.pack(pady=10, padx=20)
             self.confirm_pw_entry.bind('<Return>', lambda e: self._handle_create_vault())
+            self._setup_context_menu(self.confirm_pw_entry)
 
         # Buttons
         btn_frame = tk.Frame(login_box, bg='#34495e')
