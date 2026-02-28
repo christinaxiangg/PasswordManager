@@ -411,6 +411,40 @@ class PasswordManager:
         self._setup_styles()
         self._show_login_screen()
 
+    def _setup_context_menu(self, widget):
+        """Setup right-click context menu with paste for Entry widgets"""
+        context_menu = tk.Menu(widget, tearoff=False, bg='#34495e', fg='#ecf0f1')
+        context_menu.add_command(label="Paste",
+                                command=lambda: self._paste_from_clipboard(widget))
+
+        def show_context_menu(event):
+            try:
+                context_menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                context_menu.grab_release()
+
+        widget.bind("<Button-3>", show_context_menu)  # Right-click
+
+    def _paste_from_clipboard(self, widget):
+        """Paste text from clipboard into Entry widget"""
+        try:
+            # Try pyperclip first if available
+            if CLIPBOARD_AVAILABLE:
+                import pyperclip
+                text = pyperclip.paste()
+                widget.insert(tk.INSERT, text)
+                return
+        except:
+            pass
+
+        try:
+            # Try Tkinter clipboard
+            text = self.root.clipboard_get()
+            widget.insert(tk.INSERT, text)
+        except Exception as e:
+            messagebox.showerror("Clipboard Error",
+                               f"Could not paste from clipboard.\n\nError: {str(e)}")
+
     def _setup_styles(self):
         """Configure ttk styles for dark theme"""
         style = ttk.Style()
@@ -711,6 +745,12 @@ class PasswordManager:
                  bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
                  padx=20, pady=8).pack(pady=20)
 
+        # Setup context menu for paste functionality
+        self._setup_context_menu(entries['website'])
+        self._setup_context_menu(entries['username'])
+        self._setup_context_menu(entries['password'])
+        self._setup_context_menu(entries['notes'])
+
     def _generate_password(self, entry_widget):
         """Generate and insert password"""
         gen_dialog = PasswordGeneratorDialog(self.root)
@@ -741,6 +781,38 @@ class PasswordManager:
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.resizable(True, True)  # Allow resizing for flexibility
+
+        # Reusable clipboard helper for this dialog
+        def _copy_to_clipboard(text, btn):
+            try:
+                if CLIPBOARD_AVAILABLE:
+                    import pyperclip
+                    pyperclip.copy(text)
+                    btn.config(text='✓ Copied!', bg='#16a085')
+                    dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+                    return
+            except:
+                pass
+
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.root.update()
+                btn.config(text='✓ Copied!', bg='#16a085')
+                dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+            except Exception:
+                try:
+                    dialog.clipboard_clear()
+                    dialog.clipboard_append(text)
+                    dialog.update_idletasks()
+                    dialog.update()
+                    btn.config(text='✓ Copied!', bg='#16a085')
+                    dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+                except Exception as e2:
+                    messagebox.showerror("Clipboard Error",
+                                           f"Could not copy to clipboard.\n\n"
+                                           f"The text is: {text}\n\n"
+                                           f"Please copy it manually.\n\nError: {str(e2)}")
 
         # Display fields
         fields = [
@@ -778,49 +850,35 @@ class PasswordManager:
                 # Store password in a variable accessible to the copy function
                 password_to_copy = value
 
-                def copy_password():
-                    try:
-                        # Method 1: Try pyperclip first if available
-                        if CLIPBOARD_AVAILABLE:
-                            import pyperclip
-                            pyperclip.copy(password_to_copy)
-                            copy_btn.config(text='✓ Copied!', bg='#16a085')
-                            dialog.after(2000, lambda: copy_btn.config(text='�� Copy', bg='#27ae60'))
-                            return
-                    except:
-                        pass
-
-                    try:
-                        # Method 2: Use tkinter clipboard with root window
-                        self.root.clipboard_clear()
-                        self.root.clipboard_append(password_to_copy)
-                        # Force the clipboard to persist
-                        self.root.update()
-                        copy_btn.config(text='✓ Copied!', bg='#16a085')
-                        dialog.after(2000, lambda: copy_btn.config(text='�� Copy', bg='#27ae60'))
-                    except Exception as e:
-                        # Method 3: Try with dialog window
-                        try:
-                            dialog.clipboard_clear()
-                            dialog.clipboard_append(password_to_copy)
-                            dialog.update_idletasks()
-                            dialog.update()
-                            copy_btn.config(text='✓ Copied!', bg='#16a085')
-                            dialog.after(2000, lambda: copy_btn.config(text='�� Copy', bg='#27ae60'))
-                        except Exception as e2:
-                            messagebox.showerror("Clipboard Error",
-                                               f"Could not copy to clipboard.\n\n"
-                                               f"The password is: {password_to_copy}\n\n"
-                                               f"Please copy it manually.\n\nError: {str(e2)}")
-
-                copy_btn = tk.Button(pw_frame, text='�� Copy', command=copy_password,
+                copy_btn = tk.Button(pw_frame, text='�� Copy',
+                         command=lambda text=password_to_copy, b=None: _copy_to_clipboard(text, copy_btn),
                          bg='#27ae60', fg='white', font=('Arial', 10))
                 copy_btn.pack(side=tk.LEFT, padx=2)
+
             elif label == "�� Notes":
                 note_text = tk.Text(dialog, width=50, height=4, font=('Arial', 10))
                 note_text.insert('1.0', value)
                 note_text.config(state='disabled', bg='#2c3e50', fg='#ecf0f1')
                 note_text.pack(anchor='w', padx=50, pady=5)
+
+            elif label == "�� Website" or label == "�� Username":
+                # Show read-only entry with copy button for Website and Username
+                frame = tk.Frame(dialog, bg='#34495e')
+                frame.pack(anchor='w', padx=50, pady=5)
+
+                entry_display = tk.Entry(frame, width=50, font=('Arial', 11))
+                entry_display.insert(0, value)
+                entry_display.config(state='readonly')
+                entry_display.pack(side=tk.LEFT, padx=(0, 5))
+
+                # Create a local copy of value to bind to the lambda
+                text_to_copy = value
+
+                copy_btn = tk.Button(frame, text='�� Copy',
+                                     command=lambda text=text_to_copy, b=None: _copy_to_clipboard(text, copy_btn),
+                                     bg='#27ae60', fg='white', font=('Arial', 10))
+                copy_btn.pack(side=tk.LEFT, padx=2)
+
             else:
                 tk.Label(dialog, text=value, bg='#34495e', fg='#bdc3c7',
                         font=('Arial', 11)).pack(anchor='w', padx=50)
@@ -919,6 +977,12 @@ class PasswordManager:
         tk.Button(dialog, text="�� Save Changes", command=save,
                  bg='#e67e22', fg='white', font=('Arial', 11, 'bold'),
                  padx=20, pady=8).pack(pady=20)
+
+        # Setup context menu for paste functionality
+        self._setup_context_menu(entries['website'])
+        self._setup_context_menu(entries['username'])
+        self._setup_context_menu(entries['password'])
+        self._setup_context_menu(entries['notes'])
 
     def _delete_password(self):
         """Delete selected password"""
