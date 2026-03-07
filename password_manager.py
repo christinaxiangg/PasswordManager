@@ -567,6 +567,9 @@ class PasswordGeneratorDialog:
 class PasswordManager:
     """Main password manager application"""
 
+    # Inactivity timeout: 5 minutes (300 seconds)
+    INACTIVITY_TIMEOUT = 300
+
     def __init__(self):
         if not CRYPTO_AVAILABLE:
             messagebox.showerror("Error",
@@ -588,6 +591,10 @@ class PasswordManager:
 
         self.model = VaultModel()
         self.current_filter = ""
+
+        # Inactivity timer variables
+        self.inactivity_timer = None
+        self.vault_unlocked = False
 
         self._setup_styles()
         self._show_login_screen()
@@ -643,6 +650,46 @@ class PasswordManager:
                        foreground="#ecf0f1",
                        font=('Arial', 11, 'bold'))
         style.map('Treeview', background=[('selected', '#2980b9')])
+
+    def _reset_inactivity_timer(self, event=None):
+        """Reset the inactivity timeout timer on user activity"""
+        if not self.vault_unlocked:
+            return
+
+        # Cancel existing timer if any
+        if self.inactivity_timer is not None:
+            self.root.after_cancel(self.inactivity_timer)
+
+        # Start a new timer
+        self.inactivity_timer = self.root.after(
+            self.INACTIVITY_TIMEOUT * 1000,
+            self._handle_inactivity_timeout
+        )
+
+    def _handle_inactivity_timeout(self):
+        """Handle inactivity timeout by logging out the user"""
+        if self.vault_unlocked:
+            messagebox.showwarning("Session Timeout",
+                "Your session has timed out due to inactivity.\nPlease log in again.")
+            self._logout()
+
+    def _logout(self):
+        """Clear the vault and return to login screen"""
+        # Clear the encryption key from memory
+        self.model.key = None
+        self.vault_unlocked = False
+
+        # Cancel any pending inactivity timer
+        if self.inactivity_timer is not None:
+            self.root.after_cancel(self.inactivity_timer)
+            self.inactivity_timer = None
+
+        # Destroy the main app frame if it exists
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Return to login screen
+        self._show_login_screen()
 
     def _show_login_screen(self):
         """Display login/create vault screen"""
@@ -710,7 +757,9 @@ class PasswordManager:
         try:
             if self.model.authenticate(password):
                 self.login_frame.destroy()
+                self.vault_unlocked = True
                 self._show_main_app()
+                self._reset_inactivity_timer()
             else:
                 messagebox.showerror("Error", "Incorrect master password")
                 self.master_pw_entry.delete(0, tk.END)
@@ -738,7 +787,9 @@ class PasswordManager:
             self.model.create_vault(password)
             messagebox.showinfo("Success", "Vault created successfully!")
             self.login_frame.destroy()
+            self.vault_unlocked = True
             self._show_main_app()
+            self._reset_inactivity_timer()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create vault: {str(e)}")
 
@@ -804,6 +855,7 @@ class PasswordManager:
             ("Export", self._export_vault, '#16a085'),
             ("Import", self._import_vault, '#1abc9c'),
             ("Change Master PW", self._change_master_password, '#d35400'),
+            ("🔓 Logout", self._logout, '#c0392b'),
         ]
 
         for text, command, color in buttons:
@@ -813,11 +865,18 @@ class PasswordManager:
             btn.pack(side=tk.LEFT, padx=5)
 
         # Status bar
-        self.status_label = tk.Label(self.root, text="", bg='#34495e',
-                                     fg='#ecf0f1', font=('Arial', 9))
+        self.status_label = tk.Label(self.root, text="Session timeout in 5 minutes of inactivity",
+                                     bg='#34495e',
+                                     fg='#bdc3c7', font=('Arial', 9))
         self.status_label.pack(fill=tk.X, side=tk.BOTTOM)
 
         self._refresh_password_list()
+
+        # Bind global events to reset inactivity timer
+        self.root.bind('<KeyPress>', self._reset_inactivity_timer)
+        self.root.bind('<Motion>', self._reset_inactivity_timer)
+        self.root.bind('<Button-1>', self._reset_inactivity_timer)
+        self.root.bind('<Button-3>', self._reset_inactivity_timer)
 
     def _refresh_password_list(self):
         """Refresh the password list display"""
