@@ -575,7 +575,7 @@ class PasswordManager:
 
         self.root = tk.Tk()
         self.root.title("Secure Password Manager")
-        self.root.geometry("1000x700")
+        self.root.geometry("1200x800")
         self.root.configure(bg='#2c3e50')
 
         # Set icon (optional)
@@ -1306,11 +1306,11 @@ class PasswordManager:
         button_frame.pack(pady=30, fill=tk.X, padx=40)
 
         tk.Button(button_frame, text="Export", command=do_export,
-                 bg='#27ae60', fg='white', font=('Arial', 12, 'bold'),
-                 padx=30, pady=12, width=15).pack(side=tk.LEFT, padx=8)
+                 bg='#27ae60', fg='white', font=('Arial', 10, 'bold'),
+                 padx=15, pady=5).pack(side=tk.LEFT, padx=5)
         tk.Button(button_frame, text="Cancel", command=export_dialog.destroy,
-                 bg='#e74c3c', fg='white', font=('Arial', 12, 'bold'),
-                 padx=30, pady=12, width=15).pack(side=tk.LEFT, padx=8)
+                 bg='#e74c3c', fg='white', font=('Arial', 10, 'bold'),
+                 padx=15, pady=5).pack(side=tk.LEFT, padx=5)
 
         export_pw_entry.focus()
 
