@@ -106,8 +106,62 @@ class CryptoManager:
 
     @staticmethod
     def hash_password(password: str) -> str:
-        """Hash password for verification"""
-        return hashlib.sha256(password.encode()).hexdigest()
+        """Create a slow PBKDF2-based password verifier string.
+
+        Stored format:
+            pbkdf2$<iterations>$<salt_b64>$<verifier_b64>
+
+        This replaces the insecure fast SHA-256 hash previously used.
+        """
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("Cryptography library not available")
+
+        iterations = 200000
+        salt = os.urandom(16)
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=iterations,
+        )
+        verifier = kdf.derive(password.encode())
+        return f"pbkdf2${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(verifier).decode()}"
+
+    @staticmethod
+    def verify_password(password: str, stored: str) -> bool:
+        """Verify a candidate password against a stored verifier.
+
+        Supports the new PBKDF2 format and falls back to the legacy
+        SHA-256 hex hash for compatibility with existing vaults.
+        """
+        if not stored:
+            return False
+
+        # New verifier format
+        if stored.startswith("pbkdf2$"):
+            try:
+                _prefix, iter_s, salt_b64, verifier_b64 = stored.split("$")
+                iterations = int(iter_s)
+                salt = base64.b64decode(salt_b64)
+                expected = base64.b64decode(verifier_b64)
+
+                # Re-create KDF and verify
+                kdf = PBKDF2HMAC(
+                    algorithm=hashes.SHA256(),
+                    length=len(expected),
+                    salt=salt,
+                    iterations=iterations,
+                )
+                kdf.verify(password.encode(), expected)
+                return True
+            except Exception:
+                return False
+
+        # Legacy fast SHA-256 hex digest (compatibility)
+        try:
+            return hashlib.sha256(password.encode()).hexdigest() == stored
+        except Exception:
+            return False
 
 
 # ==================== Password Generator ====================
@@ -162,7 +216,7 @@ class VaultModel:
         salt = os.urandom(16)
         self.key = CryptoManager.derive_key(master_password, salt)
 
-        # Save salt and password hash
+        # Save salt and password verifier (slow KDF)
         with open(self.salt_file, 'wb') as f:
             f.write(salt)
         with open(self.hash_file, 'w') as f:
@@ -177,12 +231,21 @@ class VaultModel:
         if not self.vault_exists():
             return False
 
-        # Verify password hash
+        # Verify password using slow KDF verifier (with legacy fallback)
         with open(self.hash_file, 'r') as f:
             stored_hash = f.read().strip()
 
-        if CryptoManager.hash_password(master_password) != stored_hash:
+        if not CryptoManager.verify_password(master_password, stored_hash):
             return False
+
+        # If the stored hash was using the old fast SHA256 format, upgrade it
+        if not stored_hash.startswith("pbkdf2$"):
+            try:
+                with open(self.hash_file, 'w') as f:
+                    f.write(CryptoManager.hash_password(master_password))
+            except Exception:
+                # Non-fatal: proceed even if we couldn't upgrade
+                pass
 
         # Derive key and decrypt vault
         with open(self.salt_file, 'rb') as f:
@@ -274,7 +337,7 @@ class VaultModel:
         with open(self.hash_file, 'r') as f:
             stored_hash = f.read().strip()
 
-        if CryptoManager.hash_password(old_password) != stored_hash:
+        if not CryptoManager.verify_password(old_password, stored_hash):
             return False
 
         # Generate new salt and key
@@ -285,7 +348,7 @@ class VaultModel:
         self.key = new_key
         self._save_vault()
 
-        # Update salt and hash
+        # Update salt and verifier
         with open(self.salt_file, 'wb') as f:
             f.write(new_salt)
         with open(self.hash_file, 'w') as f:
