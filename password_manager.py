@@ -1234,10 +1234,10 @@ class PasswordManager:
         if not filepath:
             return
 
-        # Show export options dialog
+        # Show export options dialog with enlarged size
         export_dialog = tk.Toplevel(self.root)
         export_dialog.title("Export Vault - Security Options")
-        export_dialog.geometry("500x300")
+        export_dialog.geometry("600x600")  # Enlarged from 500x300
         export_dialog.configure(bg='#34495e')
         export_dialog.transient(self.root)
         export_dialog.grab_set()
@@ -1246,30 +1246,30 @@ class PasswordManager:
         export_password_confirm = tk.StringVar()
 
         tk.Label(export_dialog, text="⚠ Export Security Options", font=('Arial', 14, 'bold'),
-                bg='#34495e', fg='#e74c3c').pack(pady=20)
+                bg='#34495e', fg='#e74c3c').pack(pady=15)
 
         info_frame = tk.Frame(export_dialog, bg='#34495e')
-        info_frame.pack(pady=10, padx=20)
+        info_frame.pack(pady=10, padx=30, fill=tk.BOTH, expand=False)
 
         info_text = ("You can protect your export with a password.\n\n"
                      "• No password: Plain JSON (vulnerable if leaked)\n"
                      "• With password: Encrypted export (recommended)\n\n"
                      "Leave blank to export as plain JSON (not recommended).")
         tk.Label(info_frame, text=info_text, font=('Arial', 10),
-                bg='#34495e', fg='#bdc3c7', justify=tk.LEFT).pack(anchor='w')
+                bg='#34495e', fg='#bdc3c7', justify=tk.LEFT, wraplength=500).pack(anchor='w')
 
         # Password field
-        tk.Label(export_dialog, text="Export Password (optional):", font=('Arial', 10, 'bold'),
-                bg='#34495e', fg='#ecf0f1').pack(pady=(20, 5), anchor='w', padx=30)
-        export_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 11), width=35)
-        export_pw_entry.pack(pady=5, padx=30)
+        tk.Label(export_dialog, text="Export Password (optional):", font=('Arial', 11, 'bold'),
+                bg='#34495e', fg='#ecf0f1').pack(pady=(20, 8), anchor='w', padx=40)
+        export_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 12), width=40)
+        export_pw_entry.pack(pady=8, padx=40, fill=tk.X)
         export_password.trace('w', lambda *args: export_pw_entry.config(show="●"))
 
         # Confirm password field
-        tk.Label(export_dialog, text="Confirm Password:", font=('Arial', 10, 'bold'),
-                bg='#34495e', fg='#ecf0f1').pack(pady=(10, 5), anchor='w', padx=30)
-        confirm_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 11), width=35)
-        confirm_pw_entry.pack(pady=5, padx=30)
+        tk.Label(export_dialog, text="Confirm Password:", font=('Arial', 11, 'bold'),
+                bg='#34495e', fg='#ecf0f1').pack(pady=(15, 8), anchor='w', padx=40)
+        confirm_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 12), width=40)
+        confirm_pw_entry.pack(pady=8, padx=40, fill=tk.X)
 
         def do_export():
             password = export_pw_entry.get()
@@ -1303,14 +1303,14 @@ class PasswordManager:
                 messagebox.showerror("Error", f"Export failed: {str(e)}")
 
         button_frame = tk.Frame(export_dialog, bg='#34495e')
-        button_frame.pack(pady=20)
+        button_frame.pack(pady=30, fill=tk.X, padx=40)
 
         tk.Button(button_frame, text="Export", command=do_export,
-                 bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
-                 padx=20, pady=8).pack(side=tk.LEFT, padx=5)
+                 bg='#27ae60', fg='white', font=('Arial', 12, 'bold'),
+                 padx=30, pady=12, width=15).pack(side=tk.LEFT, padx=8)
         tk.Button(button_frame, text="Cancel", command=export_dialog.destroy,
-                 bg='#e74c3c', fg='white', font=('Arial', 11, 'bold'),
-                 padx=20, pady=8).pack(side=tk.LEFT, padx=5)
+                 bg='#e74c3c', fg='white', font=('Arial', 12, 'bold'),
+                 padx=30, pady=12, width=15).pack(side=tk.LEFT, padx=8)
 
         export_pw_entry.focus()
 
