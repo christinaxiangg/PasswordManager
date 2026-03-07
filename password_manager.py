@@ -27,7 +27,8 @@ except ImportError:
 try:
     from cryptography.fernet import Fernet
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives import hashes, hmac
+
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -159,7 +160,7 @@ class CryptoManager:
 
         # Legacy fast SHA-256 hex digest (compatibility)
         try:
-            return hashlib.sha256(password.encode()).hexdigest() == stored
+            return hmac.compare_digest(hashlib.sha256(password.encode()).hexdigest(), stored)
         except Exception:
             return False
 
