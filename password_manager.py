@@ -648,7 +648,7 @@ class PasswordManager:
         self.login_frame.pack(fill=tk.BOTH, expand=True, padx=50, pady=50)
 
         # Title
-        tk.Label(self.login_frame, text="�� Secure Password Manager",
+        tk.Label(self.login_frame, text="[*] Secure Password Manager",
                 font=('Arial', 28, 'bold'), bg='#2c3e50', fg='#ecf0f1').pack(pady=30)
 
         # Login box
@@ -746,14 +746,14 @@ class PasswordManager:
         toolbar = tk.Frame(self.root, bg='#34495e', height=60)
         toolbar.pack(fill=tk.X, padx=10, pady=10)
 
-        tk.Label(toolbar, text="�� Password Vault", font=('Arial', 16, 'bold'),
+        tk.Label(toolbar, text="[*] Password Vault", font=('Arial', 16, 'bold'),
                 bg='#34495e', fg='#ecf0f1').pack(side=tk.LEFT, padx=10)
 
         # Search box
         search_frame = tk.Frame(toolbar, bg='#34495e')
         search_frame.pack(side=tk.RIGHT, padx=10)
 
-        tk.Label(search_frame, text="��", font=('Arial', 14),
+        tk.Label(search_frame, text="[?]", font=('Arial', 14),
                 bg='#34495e', fg='#ecf0f1').pack(side=tk.LEFT, padx=5)
 
         self.search_var = tk.StringVar()
@@ -923,7 +923,7 @@ class PasswordManager:
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to add password: {str(e)}")
 
-        tk.Button(dialog, text="�� Save Password", command=save,
+        tk.Button(dialog, text="[+] Save Password", command=save,
                  bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
                  padx=20, pady=8).pack(pady=20)
 
@@ -970,8 +970,8 @@ class PasswordManager:
                 if CLIPBOARD_AVAILABLE:
                     import pyperclip
                     pyperclip.copy(text)
-                    btn.config(text='✓ Copied!', bg='#16a085')
-                    dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+                    btn.config(text='[OK] Copied!', bg='#16a085')
+                    dialog.after(2000, lambda: btn.config(text='[C] Copy', bg='#27ae60'))
                     return
             except:
                 pass
@@ -980,16 +980,16 @@ class PasswordManager:
                 self.root.clipboard_clear()
                 self.root.clipboard_append(text)
                 self.root.update()
-                btn.config(text='✓ Copied!', bg='#16a085')
-                dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+                btn.config(text='[OK] Copied!', bg='#16a085')
+                dialog.after(2000, lambda: btn.config(text='[C] Copy', bg='#27ae60'))
             except Exception:
                 try:
                     dialog.clipboard_clear()
                     dialog.clipboard_append(text)
                     dialog.update_idletasks()
                     dialog.update()
-                    btn.config(text='✓ Copied!', bg='#16a085')
-                    dialog.after(2000, lambda: btn.config(text='�� Copy', bg='#27ae60'))
+                    btn.config(text='[OK] Copied!', bg='#16a085')
+                    dialog.after(2000, lambda: btn.config(text='[C] Copy', bg='#27ae60'))
                 except Exception as e2:
                     messagebox.showerror("Clipboard Error",
                                            f"Could not copy to clipboard.\n\n"
@@ -998,20 +998,20 @@ class PasswordManager:
 
         # Display fields
         fields = [
-            ("�� Website", entry.website),
-            ("�� Username", entry.username),
-            ("�� Password", entry.password),
-            ("�� Category", entry.category),
-            ("�� Notes", entry.notes or "None"),
-            ("�� Created", datetime.fromisoformat(entry.created).strftime('%Y-%m-%d %H:%M')),
-            ("�� Modified", datetime.fromisoformat(entry.modified).strftime('%Y-%m-%d %H:%M'))
+            ("[W] Website", entry.website),
+            ("[U] Username", entry.username),
+            ("[P] Password", entry.password),
+            ("[C] Category", entry.category),
+            ("[N] Notes", entry.notes or "None"),
+            ("[+] Created", datetime.fromisoformat(entry.created).strftime('%Y-%m-%d %H:%M')),
+            ("[M] Modified", datetime.fromisoformat(entry.modified).strftime('%Y-%m-%d %H:%M'))
         ]
 
         for label, value in fields:
             tk.Label(dialog, text=label, bg='#34495e', fg='#ecf0f1',
                     font=('Arial', 11, 'bold')).pack(anchor='w', padx=30, pady=(10, 2))
 
-            if label == "�� Password":
+            if label == "[P] Password":
                 pw_frame = tk.Frame(dialog, bg='#34495e')
                 pw_frame.pack(anchor='w', padx=50, pady=5)
 
@@ -1023,27 +1023,27 @@ class PasswordManager:
                 def toggle_visibility():
                     current = pw_display.cget('show')
                     pw_display.config(show='' if current == '●' else '●')
-                    toggle_btn.config(text='��' if current == '' else '��‍��')
+                    toggle_btn.config(text='[*] Hide' if current == '' else '[*] Show')
 
-                toggle_btn = tk.Button(pw_frame, text='��‍��', command=toggle_visibility,
+                toggle_btn = tk.Button(pw_frame, text='[*] Show', command=toggle_visibility,
                                       bg='#3498db', fg='white', font=('Arial', 10))
                 toggle_btn.pack(side=tk.LEFT, padx=2)
 
                 # Store password in a variable accessible to the copy function
                 password_to_copy = value
 
-                copy_btn = tk.Button(pw_frame, text='�� Copy',
+                copy_btn = tk.Button(pw_frame, text='[C] Copy',
                          command=lambda text=password_to_copy, b=None: _copy_to_clipboard(text, copy_btn),
                          bg='#27ae60', fg='white', font=('Arial', 10))
                 copy_btn.pack(side=tk.LEFT, padx=2)
 
-            elif label == "�� Notes":
+            elif label == "[N] Notes":
                 note_text = tk.Text(dialog, width=50, height=4, font=('Arial', 10))
                 note_text.insert('1.0', value)
                 note_text.config(state='disabled', bg='#2c3e50', fg='#ecf0f1')
                 note_text.pack(anchor='w', padx=50, pady=5)
 
-            elif label == "�� Website" or label == "�� Username":
+            elif label == "[W] Website" or label == "[U] Username":
                 # Show read-only entry with copy button for Website and Username
                 frame = tk.Frame(dialog, bg='#34495e')
                 frame.pack(anchor='w', padx=50, pady=5)
@@ -1056,7 +1056,7 @@ class PasswordManager:
                 # Create a local copy of value to bind to the lambda
                 text_to_copy = value
 
-                copy_btn = tk.Button(frame, text='�� Copy',
+                copy_btn = tk.Button(frame, text='[C] Copy',
                                      command=lambda text=text_to_copy, b=None: _copy_to_clipboard(text, copy_btn),
                                      bg='#27ae60', fg='white', font=('Arial', 10))
                 copy_btn.pack(side=tk.LEFT, padx=2)
@@ -1065,7 +1065,7 @@ class PasswordManager:
                 tk.Label(dialog, text=value, bg='#34495e', fg='#bdc3c7',
                         font=('Arial', 11)).pack(anchor='w', padx=50)
 
-        tk.Button(dialog, text="✖ Close", command=dialog.destroy,
+        tk.Button(dialog, text="[X] Close", command=dialog.destroy,
                  bg='#e74c3c', fg='white', font=('Arial', 10, 'bold'),
                  padx=20, pady=5).pack(pady=20)
 
@@ -1394,7 +1394,7 @@ class PasswordManager:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        tk.Label(dialog, text="⚠ Change Master Password", font=('Arial', 14, 'bold'),
+        tk.Label(dialog, text="[!] Change Master Password", font=('Arial', 14, 'bold'),
                 bg='#34495e', fg='#ecf0f1').pack(pady=20)
 
         entries = {}
@@ -1433,7 +1433,7 @@ class PasswordManager:
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to change password: {str(e)}")
 
-        tk.Button(dialog, text="�� Change Password", command=change,
+        tk.Button(dialog, text="[K] Change Password", command=change,
                  bg='#e67e22', fg='white', font=('Arial', 11, 'bold'),
                  padx=20, pady=8).pack(pady=30)
 
