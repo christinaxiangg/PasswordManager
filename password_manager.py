@@ -163,6 +163,74 @@ class CryptoManager:
         except Exception:
             return False
 
+    @staticmethod
+    def encrypt_export(data: dict, password: str) -> bytes:
+        """Encrypt export data with a password.
+
+        Format: encrypted$<salt_b64>$<ciphertext_b64>
+        Uses Fernet encryption derived from password via PBKDF2.
+        """
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("Cryptography library not available")
+
+        # Generate salt for this export
+        salt = os.urandom(16)
+        # Derive key from password
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
+        # Encrypt the JSON data
+        f = Fernet(key)
+        json_data = json.dumps(data).encode()
+        encrypted = f.encrypt(json_data)
+
+        # Format: encrypted$<salt_b64>$<ciphertext_b64>
+        export_format = f"encrypted${base64.b64encode(salt).decode()}${base64.b64encode(encrypted).decode()}"
+        return export_format.encode()
+
+    @staticmethod
+    def decrypt_export(data: bytes, password: str) -> dict:
+        """Decrypt password-protected export data.
+
+        Expects format: encrypted$<salt_b64>$<ciphertext_b64>
+        """
+        if not CRYPTO_AVAILABLE:
+            raise RuntimeError("Cryptography library not available")
+
+        try:
+            data_str = data.decode()
+            if not data_str.startswith("encrypted$"):
+                raise ValueError("Invalid encrypted export format")
+
+            parts = data_str.split("$", 2)
+            if len(parts) != 3:
+                raise ValueError("Invalid encrypted export format")
+
+            _prefix, salt_b64, ciphertext_b64 = parts
+            salt = base64.b64decode(salt_b64)
+            ciphertext = base64.b64decode(ciphertext_b64)
+
+            # Derive key from password
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+
+            # Decrypt
+            f = Fernet(key)
+            decrypted = f.decrypt(ciphertext)
+            return json.loads(decrypted.decode())
+        except Exception as e:
+            raise ValueError(f"Failed to decrypt export: {str(e)}")
+
 
 # ==================== Password Generator ====================
 
@@ -308,14 +376,62 @@ class VaultModel:
             if query in v.website.lower() or query in v.username.lower()
         }
 
-    def export_vault(self, filepath: str, password: str) -> bool:
-        """Export vault to file"""
+    def export_vault(self, filepath: str, password: str = "") -> bool:
+        """Export vault to file with optional encryption.
+
+        If password is provided, export is encrypted.
+        If password is empty, export is plaintext JSON.
+        """
         try:
             export_data = {
                 k: asdict(v) for k, v in self.passwords.items()
             }
-            with open(filepath, 'w') as f:
-                json.dump(export_data, f, indent=2)
+
+            if password:
+                # Encrypted export
+                encrypted_data = CryptoManager.encrypt_export(export_data, password)
+                with open(filepath, 'wb') as f:
+                    f.write(encrypted_data)
+            else:
+                # Plaintext export
+                with open(filepath, 'w') as f:
+                    json.dump(export_data, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def import_vault(self, filepath: str, password: str = "") -> bool:
+        """Import passwords from exported vault file.
+
+        Detects format (encrypted vs plaintext) and imports accordingly.
+        Returns False on failure, True on success.
+        """
+        try:
+            with open(filepath, 'rb') as f:
+                data = f.read()
+
+            # Try to detect if it's encrypted
+            try:
+                data_str = data.decode()
+                if data_str.startswith("encrypted$"):
+                    # Encrypted export
+                    if not password:
+                        raise ValueError("Password required for encrypted export")
+                    imported_data = CryptoManager.decrypt_export(data, password)
+                else:
+                    # Plaintext JSON
+                    imported_data = json.loads(data_str)
+            except UnicodeDecodeError:
+                # Binary data, must be encrypted
+                if not password:
+                    raise ValueError("Password required for encrypted export")
+                imported_data = CryptoManager.decrypt_export(data, password)
+
+            # Import the data
+            for entry_id, entry_dict in imported_data.items():
+                entry = PasswordEntry(**entry_dict)
+                self.passwords[entry_id] = entry
+
             return True
         except Exception:
             return False
@@ -679,12 +795,13 @@ class PasswordManager:
 
         buttons = [
             ("➕ Add Password", self._add_password, '#27ae60'),
-            ("�� View", self._view_password, '#3498db'),
+            ("View", self._view_password, '#3498db'),
             ("✏ Edit", self._edit_password, '#e67e22'),
-            ("�� Delete", self._delete_password, '#e74c3c'),
-            ("�� Auto-Fill", self._auto_fill, '#9b59b6'),
-            ("�� Export", self._export_vault, '#16a085'),
-            ("�� Change Master PW", self._change_master_password, '#d35400'),
+            ("Delete", self._delete_password, '#e74c3c'),
+            ("Auto-Fill", self._auto_fill, '#9b59b6'),
+            ("Export", self._export_vault, '#16a085'),
+            ("Import", self._import_vault, '#1abc9c'),
+            ("Change Master PW", self._change_master_password, '#d35400'),
         ]
 
         for text, command, color in buttons:
@@ -1107,7 +1224,7 @@ class PasswordManager:
                 messagebox.showerror("Error", f"Auto-fill failed: {str(e)}")
 
     def _export_vault(self):
-        """Export vault to JSON file"""
+        """Export vault to file with optional password protection"""
         filepath = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
@@ -1117,13 +1234,156 @@ class PasswordManager:
         if not filepath:
             return
 
+        # Show export options dialog
+        export_dialog = tk.Toplevel(self.root)
+        export_dialog.title("Export Vault - Security Options")
+        export_dialog.geometry("500x300")
+        export_dialog.configure(bg='#34495e')
+        export_dialog.transient(self.root)
+        export_dialog.grab_set()
+
+        export_password = tk.StringVar()
+        export_password_confirm = tk.StringVar()
+
+        tk.Label(export_dialog, text="⚠ Export Security Options", font=('Arial', 14, 'bold'),
+                bg='#34495e', fg='#e74c3c').pack(pady=20)
+
+        info_frame = tk.Frame(export_dialog, bg='#34495e')
+        info_frame.pack(pady=10, padx=20)
+
+        info_text = ("You can protect your export with a password.\n\n"
+                     "• No password: Plain JSON (vulnerable if leaked)\n"
+                     "• With password: Encrypted export (recommended)\n\n"
+                     "Leave blank to export as plain JSON (not recommended).")
+        tk.Label(info_frame, text=info_text, font=('Arial', 10),
+                bg='#34495e', fg='#bdc3c7', justify=tk.LEFT).pack(anchor='w')
+
+        # Password field
+        tk.Label(export_dialog, text="Export Password (optional):", font=('Arial', 10, 'bold'),
+                bg='#34495e', fg='#ecf0f1').pack(pady=(20, 5), anchor='w', padx=30)
+        export_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 11), width=35)
+        export_pw_entry.pack(pady=5, padx=30)
+        export_password.trace('w', lambda *args: export_pw_entry.config(show="●"))
+
+        # Confirm password field
+        tk.Label(export_dialog, text="Confirm Password:", font=('Arial', 10, 'bold'),
+                bg='#34495e', fg='#ecf0f1').pack(pady=(10, 5), anchor='w', padx=30)
+        confirm_pw_entry = tk.Entry(export_dialog, show="●", font=('Arial', 11), width=35)
+        confirm_pw_entry.pack(pady=5, padx=30)
+
+        def do_export():
+            password = export_pw_entry.get()
+            confirm = confirm_pw_entry.get()
+
+            # Validate passwords match if provided
+            if password and password != confirm:
+                messagebox.showerror("Error", "Passwords do not match")
+                return
+
+            # Warn if exporting without password
+            if not password:
+                if not messagebox.askyesno("⚠ Warning",
+                                          "You are exporting without password protection.\n\n"
+                                          "This creates a PLAINTEXT file containing all your passwords.\n"
+                                          "Anyone with access to this file can read your credentials.\n\n"
+                                          "Are you sure you want to continue?"):
+                    return
+
+            try:
+                if self.model.export_vault(filepath, password):
+                    if password:
+                        msg = f"Vault exported (encrypted) to:\n{filepath}\n\n✓ Keep this file secure!"
+                    else:
+                        msg = f"Vault exported (plaintext) to:\n{filepath}\n\n⚠ Keep this file VERY secure - it contains unencrypted passwords!"
+                    messagebox.showinfo("Success", msg)
+                    export_dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "Failed to export vault")
+            except Exception as e:
+                messagebox.showerror("Error", f"Export failed: {str(e)}")
+
+        button_frame = tk.Frame(export_dialog, bg='#34495e')
+        button_frame.pack(pady=20)
+
+        tk.Button(button_frame, text="Export", command=do_export,
+                 bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
+                 padx=20, pady=8).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Cancel", command=export_dialog.destroy,
+                 bg='#e74c3c', fg='white', font=('Arial', 11, 'bold'),
+                 padx=20, pady=8).pack(side=tk.LEFT, padx=5)
+
+        export_pw_entry.focus()
+
+    def _import_vault(self):
+        """Import passwords from exported vault file"""
+        filepath = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Import Vault"
+        )
+
+        if not filepath:
+            return
+
+        # Determine if file is encrypted
         try:
-            if self.model.export_vault(filepath, ""):
-                messagebox.showinfo("Success", f"Vault exported to:\n{filepath}\n\n⚠ Keep this file secure!")
+            with open(filepath, 'rb') as f:
+                data = f.read()
+
+            is_encrypted = False
+            try:
+                data_str = data.decode()
+                is_encrypted = data_str.startswith("encrypted$")
+            except UnicodeDecodeError:
+                is_encrypted = True
+
+            import_password = ""
+
+            if is_encrypted:
+                # Prompt for password
+                pwd_dialog = tk.Toplevel(self.root)
+                pwd_dialog.title("Import Encrypted Vault")
+                pwd_dialog.geometry("400x200")
+                pwd_dialog.configure(bg='#34495e')
+                pwd_dialog.transient(self.root)
+                pwd_dialog.grab_set()
+
+                tk.Label(pwd_dialog, text="This export is encrypted.", font=('Arial', 12, 'bold'),
+                        bg='#34495e', fg='#ecf0f1').pack(pady=20)
+                tk.Label(pwd_dialog, text="Enter password:", font=('Arial', 10),
+                        bg='#34495e', fg='#ecf0f1').pack(pady=5)
+
+                pwd_entry = tk.Entry(pwd_dialog, show="●", font=('Arial', 11), width=30)
+                pwd_entry.pack(pady=10, padx=20)
+
+                def do_import():
+                    import_password = pwd_entry.get()
+                    pwd_dialog.destroy()
+                    self._perform_import(filepath, import_password)
+
+                tk.Button(pwd_dialog, text="Import", command=do_import,
+                         bg='#27ae60', fg='white', font=('Arial', 11, 'bold'),
+                         padx=20, pady=8).pack(pady=10)
+
+                pwd_entry.focus()
             else:
-                messagebox.showerror("Error", "Failed to export vault")
+                # Plaintext import
+                self._perform_import(filepath, "")
+
         except Exception as e:
-            messagebox.showerror("Error", f"Export failed: {str(e)}")
+            messagebox.showerror("Error", f"Failed to read file: {str(e)}")
+
+    def _perform_import(self, filepath: str, password: str):
+        """Actually perform the import"""
+        try:
+            if self.model.import_vault(filepath, password):
+                self._refresh_password_list()
+                messagebox.showinfo("Success",
+                                   f"Imported passwords successfully!\n\n"
+                                   f"Total passwords: {len(self.model.get_all_passwords())}")
+            else:
+                messagebox.showerror("Error", "Failed to import vault. Check password and file format.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Import failed: {str(e)}")
 
     def _change_master_password(self):
         """Change master password"""
