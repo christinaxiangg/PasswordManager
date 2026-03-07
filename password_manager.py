@@ -13,6 +13,7 @@ import secrets
 import string
 import webbrowser
 import time
+import uuid
 from datetime import datetime
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict
@@ -337,7 +338,7 @@ class VaultModel:
 
     def add_password(self, entry: PasswordEntry) -> str:
         """Add a new password entry"""
-        entry_id = f"{entry.website}_{entry.username}_{len(self.passwords)}"
+        entry_id = str(uuid.uuid4())
         self.passwords[entry_id] = entry
         self._save_vault()
         return entry_id
@@ -1024,7 +1025,7 @@ class PasswordManager:
                 def toggle_visibility():
                     current = pw_display.cget('show')
                     pw_display.config(show='' if current == '●' else '●')
-                    toggle_btn.config(text='[*] Hide' if current == '' else '[*] Show')
+                    toggle_btn.config(text='[*] Hide' if current == '●' else '[*] Show')
 
                 toggle_btn = tk.Button(pw_frame, text='[*] Show', command=toggle_visibility,
                                       bg='#3498db', fg='white', font=('Arial', 10))
