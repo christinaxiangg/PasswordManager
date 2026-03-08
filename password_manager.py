@@ -480,7 +480,7 @@ class VaultModel:
 class PasswordGeneratorDialog:
     """Dialog for generating passwords"""
 
-    def __init__(self, parent):
+    def __init__(self, parent, tracker=None):
         self.result = None
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Password Generator")
@@ -488,6 +488,10 @@ class PasswordGeneratorDialog:
         self.dialog.configure(bg='#34495e')
         self.dialog.transient(parent)
         self.dialog.grab_set()
+
+        # Track this dialog if a tracker is provided
+        if tracker:
+            tracker(self.dialog)
 
         self._setup_ui()
 
@@ -595,6 +599,7 @@ class PasswordManager:
         # Inactivity timer variables
         self.inactivity_timer = None
         self.vault_unlocked = False
+        self.open_dialogs = []  # Track all open dialog windows
 
         self._setup_styles()
         self._show_login_screen()
@@ -651,6 +656,19 @@ class PasswordManager:
                        font=('Arial', 11, 'bold'))
         style.map('Treeview', background=[('selected', '#2980b9')])
 
+    def _track_dialog(self, dialog):
+        """Register a dialog window for automatic cleanup on logout"""
+        if dialog not in self.open_dialogs:
+            self.open_dialogs.append(dialog)
+
+        # Bind destruction event to remove from tracking list
+        def on_dialog_destroy(event=None):
+            if dialog in self.open_dialogs:
+                self.open_dialogs.remove(dialog)
+
+        dialog.bind('<Destroy>', on_dialog_destroy)
+        return dialog
+
     def _reset_inactivity_timer(self, event=None):
         """Reset the inactivity timeout timer on user activity"""
         if not self.vault_unlocked:
@@ -669,24 +687,64 @@ class PasswordManager:
     def _handle_inactivity_timeout(self):
         """Handle inactivity timeout by logging out the user"""
         if self.vault_unlocked:
-            messagebox.showwarning("Session Timeout",
-                "Your session has timed out due to inactivity.\nPlease log in again.")
             self._logout()
 
     def _logout(self):
         """Clear the vault and return to login screen"""
-        # Clear the encryption key from memory
+        # Clear the encryption key from memory for security
         self.model.key = None
         self.vault_unlocked = False
 
         # Cancel any pending inactivity timer
         if self.inactivity_timer is not None:
-            self.root.after_cancel(self.inactivity_timer)
+            try:
+                self.root.after_cancel(self.inactivity_timer)
+            except:
+                pass
             self.inactivity_timer = None
 
-        # Destroy the main app frame if it exists
-        for widget in self.root.winfo_children():
-            widget.destroy()
+        # Close all open dialog windows with multiple attempts to ensure they're gone
+        dialog_count = len(self.open_dialogs)
+        for attempt in range(2):  # Two attempts to close dialogs
+            for dialog in self.open_dialogs[:]:  # Create a copy to iterate safely
+                try:
+                    if dialog.winfo_exists():
+                        # Try to close gracefully first
+                        if attempt == 0:
+                            dialog.destroy()
+                        # Second attempt: force destroy if still exists
+                        elif dialog.winfo_exists():
+                            try:
+                                dialog.quit()
+                            except:
+                                pass
+                            try:
+                                dialog.destroy()
+                            except:
+                                pass
+                except Exception:
+                    # Silently ignore any errors during dialog closure
+                    pass
+        self.open_dialogs.clear()
+
+        # Unbind all events to prevent further user interaction
+        try:
+            self.root.unbind('<KeyPress>')
+            self.root.unbind('<Motion>')
+            self.root.unbind('<Button-1>')
+            self.root.unbind('<Button-3>')
+        except:
+            pass
+
+        # Destroy all main window widgets (closes main app frame)
+        try:
+            for widget in self.root.winfo_children():
+                try:
+                    widget.destroy()
+                except:
+                    pass
+        except:
+            pass
 
         # Return to login screen
         self._show_login_screen()
@@ -908,6 +966,7 @@ class PasswordManager:
     def _add_password(self):
         """Show dialog to add new password"""
         dialog = tk.Toplevel(self.root)
+        self._track_dialog(dialog)  # Track this dialog
         dialog.title("Add Password")
         dialog.geometry("500x550")
         dialog.configure(bg='#34495e')
@@ -996,7 +1055,7 @@ class PasswordManager:
 
     def _generate_password(self, entry_widget):
         """Generate and insert password"""
-        gen_dialog = PasswordGeneratorDialog(self.root)
+        gen_dialog = PasswordGeneratorDialog(self.root, tracker=self._track_dialog)
         self.root.wait_window(gen_dialog.dialog)
 
         if gen_dialog.result:
@@ -1018,6 +1077,7 @@ class PasswordManager:
             return
 
         dialog = tk.Toplevel(self.root)
+        self._track_dialog(dialog)  # Track this dialog
         dialog.title("Password Details")
         dialog.geometry("800x750")
         dialog.configure(bg='#34495e')
@@ -1145,6 +1205,7 @@ class PasswordManager:
             return
 
         dialog = tk.Toplevel(self.root)
+        self._track_dialog(dialog)  # Track this dialog
         dialog.title("Edit Password")
         dialog.geometry("500x550")
         dialog.configure(bg='#34495e')
@@ -1297,6 +1358,7 @@ class PasswordManager:
 
         # Show export options dialog with enlarged size
         export_dialog = tk.Toplevel(self.root)
+        self._track_dialog(export_dialog)  # Track this dialog
         export_dialog.title("Export Vault - Security Options")
         export_dialog.geometry("600x600")  # Enlarged from 500x300
         export_dialog.configure(bg='#34495e')
@@ -1402,6 +1464,7 @@ class PasswordManager:
             if is_encrypted:
                 # Prompt for password
                 pwd_dialog = tk.Toplevel(self.root)
+                self._track_dialog(pwd_dialog)  # Track this dialog
                 pwd_dialog.title("Import Encrypted Vault")
                 pwd_dialog.geometry("400x200")
                 pwd_dialog.configure(bg='#34495e')
@@ -1449,6 +1512,7 @@ class PasswordManager:
     def _change_master_password(self):
         """Change master password"""
         dialog = tk.Toplevel(self.root)
+        self._track_dialog(dialog)  # Track this dialog
         dialog.title("Change Master Password")
         dialog.geometry("450x350")
         dialog.configure(bg='#34495e')
