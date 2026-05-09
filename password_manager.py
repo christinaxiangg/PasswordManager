@@ -18,6 +18,7 @@ from datetime import datetime
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict
 from pathlib import Path
+from login_helper import auto_login
 
 try:
     import pyperclip
@@ -1335,15 +1336,11 @@ class PasswordManager:
                               f"2. Auto-type username and password\n\n"
                               f"Make sure your browser window is ready.\n\n"
                               f"Continue?"):
-            try:
-                webbrowser.open(entry.website)
-                time.sleep(3)
-                pyautogui.typewrite(entry.username, interval=0.1)
-                pyautogui.press('tab')
-                pyautogui.typewrite(entry.password, interval=0.1)
-                messagebox.showinfo("Success", "Credentials auto-filled!\n\nPress Enter to submit if needed.")
-            except Exception as e:
-                messagebox.showerror("Error", f"Auto-fill failed: {str(e)}")
+            result = auto_login(entry.website, entry.username, entry.password)
+            if result.success:
+                messagebox.showinfo("Success", result.message)
+            else:
+                messagebox.showerror("Error", result.message)
 
     def _export_vault(self):
         """Export vault to file with optional password protection"""
